@@ -21,8 +21,10 @@ import scala.concurrent.duration._
 class HomeController @Inject()(ws: WSClient, cache: CacheApi)(implicit exec: ExecutionContext) extends Controller {
 
 
-  val url = ConfigFactory.load().getString("waves.node") + "/payment"
+  val url = ConfigFactory.load().getString("waves.node.url") + "/payment"
+  val apiKey = ConfigFactory.load().getString("waves.node.apiKey")
   val payFrom = ConfigFactory.load().getString("faucet.payFrom")
+  val payAmount = ConfigFactory.load().getLong("faucet.payAmount")
 
   /**
    * Create an Action to render an HTML page with a welcome message.
@@ -63,8 +65,10 @@ class HomeController @Inject()(ws: WSClient, cache: CacheApi)(implicit exec: Exe
   }
 
   private def processPaymentRequest(payment: PaymentRequest, remoteAddress: String, currentTimestamp: Long) = {
-    val wavesPayment = WavesPayment(payFrom, payment.recipient, 100L, 1L)
-    val futureResponse = ws.url(url).post(Json.toJson(wavesPayment))
+    val wavesPayment = WavesPayment(payFrom, payment.recipient, payAmount, 100000L)
+    val futureResponse = ws.url(url)
+        .withHeaders("api_key" -> apiKey)
+        .post(Json.toJson(wavesPayment))
     val response = Await.result(futureResponse, 5.seconds)
     val json = response.json
     (json \ "error").toOption match {
@@ -72,7 +76,7 @@ class HomeController @Inject()(ws: WSClient, cache: CacheApi)(implicit exec: Exe
         Json.obj("status" -> "Error", "message" -> (json \ "message").as[String]))
       case None => {
         val signature = (json \ "signature").as[String];
-        val tx = WavesTransaction(signature, payment.recipient, 100L)
+        val tx = WavesTransaction(signature, payment.recipient, wavesPayment.amount)
 
         cache.set(remoteAddress, currentTimestamp, 15.minutes)
 
