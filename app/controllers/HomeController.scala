@@ -12,6 +12,7 @@ import play.api.cache._
 
 import scala.concurrent.{Await, ExecutionContext, Future}
 import scala.concurrent.duration._
+import scala.util.{Failure, Success, Try}
 
 /**
  * This controller creates an `Action` to handle HTTP requests to the
@@ -20,11 +21,12 @@ import scala.concurrent.duration._
 @Singleton
 class HomeController @Inject()(ws: WSClient, cache: CacheApi)(implicit exec: ExecutionContext) extends Controller {
 
-
+  val log = Logger
   val url = ConfigFactory.load().getString("waves.node.url") + "/payment"
   val apiKey = ConfigFactory.load().getString("waves.node.apiKey")
   val payFrom = ConfigFactory.load().getString("faucet.payFrom")
   val payAmount = ConfigFactory.load().getLong("faucet.payAmount")
+  val recaptchaSecret = ConfigFactory.load().getString("faucet.recaptchaSecret")
 
   /**
    * Create an Action to render an HTML page with a welcome message.
@@ -42,6 +44,8 @@ class HomeController @Inject()(ws: WSClient, cache: CacheApi)(implicit exec: Exe
     */
   def payment = Action(BodyParsers.parse.json) { request =>
 
+    log.info(s"IP: ${request.remoteAddress} Body: ${request.body.toString}")
+
     val currentTimestamp = System.currentTimeMillis
 
     cache.get[Long](request.remoteAddress) match {
@@ -57,11 +61,31 @@ class HomeController @Inject()(ws: WSClient, cache: CacheApi)(implicit exec: Exe
             BadRequest(Json.obj("status" -> "Error", "message" -> "Invalid json request"))
           },
           payment => {
-            processPaymentRequest(payment, request.remoteAddress, currentTimestamp)
+            if (isValidToken(payment.token, request.remoteAddress))
+              Try(processPaymentRequest(payment, request.remoteAddress, currentTimestamp)) match {
+                case Success(result) => result
+                case Failure(e) => {
+                  log.error(e.toString)
+                  InternalServerError(Json.obj("status" -> "Error", "message" -> "Internal error. Try again later."))
+                }
+              }
+            else BadRequest(Json.obj("status" -> "Error", "message" -> "Invalid captcha"))
           }
         )
       }
     }
+  }
+
+
+  private def isValidToken(token: String, ip: String) = {
+    val future = ws.url("https://www.google.com/recaptcha/api/siteverify").post(Map(
+      "secret" -> Seq(recaptchaSecret),
+      "response" -> Seq(token),
+      "remoteip" -> Seq(ip)
+    ))
+    val response = Await.result(future, 10.seconds)
+    log.info(response.json.toString)
+    (response.json \ "success").as[Boolean]
   }
 
   private def processPaymentRequest(payment: PaymentRequest, remoteAddress: String, currentTimestamp: Long) = {
@@ -75,7 +99,7 @@ class HomeController @Inject()(ws: WSClient, cache: CacheApi)(implicit exec: Exe
       case Some(error) => BadRequest(
         Json.obj("status" -> "Error", "message" -> (json \ "message").as[String]))
       case None => {
-        val signature = (json \ "signature").as[String];
+        val signature = (json \ "signature").as[String]
         val tx = WavesTransaction(signature, payment.recipient, wavesPayment.amount)
 
         cache.set(remoteAddress, currentTimestamp, 15.minutes)
