@@ -3,14 +3,15 @@ package controllers
 import javax.inject._
 
 import com.typesafe.config.ConfigFactory
-import models.{PaymentRequest, WavesPayment, WavesTransaction}
+import com.wavesplatform.wavesj.{Node, PrivateKeyAccount}
+import models.PaymentRequest
 import play.api.Logger
 import play.api.libs.json._
-import play.api.libs.ws.{WSClient, WSResponse}
+import play.api.libs.ws.WSClient
 import play.api.mvc._
 import play.api.cache._
 
-import scala.concurrent.{Await, ExecutionContext, Future}
+import scala.concurrent.{Await, ExecutionContext}
 import scala.concurrent.duration._
 import scala.util.{Failure, Success, Try}
 
@@ -22,9 +23,9 @@ import scala.util.{Failure, Success, Try}
 class HomeController @Inject()(ws: WSClient, cache: CacheApi)(implicit exec: ExecutionContext) extends Controller {
 
   val log = Logger
-  val url = ConfigFactory.load().getString("waves.node.url") + "/payment"
-  val apiKey = ConfigFactory.load().getString("waves.node.apiKey")
-  val payFrom = ConfigFactory.load().getString("faucet.payFrom")
+  val url = ConfigFactory.load().getString("waves.node.url")
+  val chainId = ConfigFactory.load().getString("waves.chainId")
+  val seed = ConfigFactory.load().getString("faucet.seed")
   val payAmount = ConfigFactory.load().getLong("faucet.payAmount")
   val recaptchaSecret = ConfigFactory.load().getString("faucet.recaptchaSecret")
 
@@ -36,7 +37,6 @@ class HomeController @Inject()(ws: WSClient, cache: CacheApi)(implicit exec: Exe
    */
   def index: Action[AnyContent] = Action {
     Ok("")
-    //Ok(views.html.index("Your new application is ready."))
   }
 
   /**
@@ -89,23 +89,11 @@ class HomeController @Inject()(ws: WSClient, cache: CacheApi)(implicit exec: Exe
   }
 
   private def processPaymentRequest(payment: PaymentRequest, remoteAddress: String, currentTimestamp: Long) = {
-    val wavesPayment = WavesPayment(payFrom, payment.recipient, payAmount, 100000L)
-    val futureResponse = ws.url(url)
-        .withHeaders("api_key" -> apiKey)
-        .post(Json.toJson(wavesPayment))
-    val response = Await.result(futureResponse, 5.seconds)
-    val json = response.json
-    (json \ "error").toOption match {
-      case Some(error) => BadRequest(
-        Json.obj("status" -> "Error", "message" -> (json \ "message").as[String]))
-      case None => {
-        val signature = (json \ "signature").as[String]
-        val tx = WavesTransaction(signature, payment.recipient, wavesPayment.amount)
+    val chainByte = chainId.charAt(0).toByte
+    val node = new Node(url, chainByte)
+    val faucetAccount = PrivateKeyAccount.fromSeed(seed, 0, chainByte)
+    val txId = node.transfer(faucetAccount, payment.recipient, payAmount, 100000L, "")
 
-        cache.set(remoteAddress, currentTimestamp, 15.minutes)
-
-        Ok(Json.obj("status" -> "OK", "tx" -> Json.toJson(tx)))
-      }
-    }
+    Ok(Json.obj("status" -> "OK", "txId" -> txId))
   }
 }
