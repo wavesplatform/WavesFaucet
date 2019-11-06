@@ -63,7 +63,11 @@ class HomeController @Inject()(ws: WSClient, cache: CacheApi)(implicit exec: Exe
           payment => {
             if (isValidToken(payment.token, request.remoteAddress))
               Try(processPaymentRequest(payment, request.remoteAddress, currentTimestamp)) match {
-                case Success(result) => result
+                case Success(result) => {
+                  cache.set(request.remoteAddress, currentTimestamp, 15.minutes)
+
+                  result
+                }
                 case Failure(e) => {
                   log.error(e.toString)
                   InternalServerError(Json.obj("status" -> "Error", "message" -> "Internal error. Try again later."))
