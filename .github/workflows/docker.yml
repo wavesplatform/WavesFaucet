@@ -47,3 +47,4 @@ jobs:
         -Dfaucet.private-key=${{ secrets.PRIVATE_KEY}} \
         -Dfaucet.recaptcha-secret=${{ secrets.RECAPTCHA_SECRET }}
       shell: bash
+  
