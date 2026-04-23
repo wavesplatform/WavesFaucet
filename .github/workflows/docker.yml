@@ -18,7 +18,7 @@ jobs:
       - uses: docker/build-push-action@v6
         with:
           push: true
-          tags: ghcr.io/wavesplatform/wavesfaucet:latest, ghcr.io/wavesplatform/wavesfaucet:latest:${{ github.ref_name }}
+          tags: ghcr.io/wavesplatform/wavesfaucet:latest, ghcr.io/wavesplatform/wavesfaucet:${{ github.ref_name }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
