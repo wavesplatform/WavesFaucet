@@ -43,7 +43,7 @@ jobs:
         --name wavesfaucet \
         -d \
         --net=host \
-        ghcr.io/wavesplatform/wavesfaucet:latest:${{ github.ref_name }} \
+        ghcr.io/wavesplatform/wavesfaucet:${{ github.ref_name }} \
         -Dfaucet.private-key=${{ secrets.PRIVATE_KEY}} \
         -Dfaucet.recaptcha-secret=${{ secrets.RECAPTCHA_SECRET }}
       shell: bash
