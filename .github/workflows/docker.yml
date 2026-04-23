@@ -37,7 +37,8 @@ jobs:
         password: ${{ secrets.GITHUB_TOKEN }}
     - name: Deploy container
       run: |
-        docker stop wavesfaucet && docker rm wavesfaucet
+        docker stop wavesfaucet || true \
+        docker rm wavesfaucet || true \
         docker run \
         --restart=always \
         --name wavesfaucet \
