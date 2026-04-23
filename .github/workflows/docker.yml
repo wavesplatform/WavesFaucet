@@ -18,6 +18,32 @@ jobs:
       - uses: docker/build-push-action@v6
         with:
           push: true
-          tags: ghcr.io/wavesplatform/wavesfaucet:latest
+          tags: ghcr.io/wavesplatform/wavesfaucet:latest, ghcr.io/wavesplatform/wavesfaucet:latest:${{ github.ref_name }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+  deploy:
+    needs: [build]
+    name: Deploy wavesfaucet
+    environment: prod
+    runs-on: waves.tech
+
+    steps:
+    - name: Log in to GitHub Container Registry
+      uses: docker/login-action@v3
+      with:
+        registry: ghcr.io
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    - name: Deploy container
+      run: |
+        docker stop wavesfaucet && docker rm wavesfaucet
+        docker run \
+        --restart=always \
+        --name wavesfaucet \
+        -d \
+        --net=host \
+        ghcr.io/wavesplatform/wavesfaucet:latest:${{ github.ref_name }} \
+        -Dfaucet.private-key=${{ secrets.PRIVATE_KEY}} \
+        -Dfaucet.recaptcha-secret=${{ secrets.RECAPTCHA_SECRET }}
+      shell: bash
