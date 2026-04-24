@@ -44,7 +44,9 @@ jobs:
         -d \
         --net=host \
         ghcr.io/wavesplatform/wavesfaucet:${{ github.ref_name }} \
+        -Dfaucet.chain-id=T \
+        -Dfaucet.waves-node-url=https://nodes-testnet.wavesnodes.com \
+        -Dfaucet.pay-amount=1000000000 \
         -Dfaucet.private-key=${{ secrets.PRIVATE_KEY}} \
         -Dfaucet.recaptcha-secret=${{ secrets.RECAPTCHA_SECRET }}
       shell: bash
-  
